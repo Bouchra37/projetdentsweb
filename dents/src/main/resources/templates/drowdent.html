@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script async src="https://docs.opencv.org/master/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+  <title>Dental Taper Angle and Symmetry Checker</title>
+  <style>
+    #originalCanvas,
+    #canvas {
+      display: inline-block;
+    }
+  </style>
+</head>
+
+<body>
+<input type="file" id="imageInput" accept="image/*" onchange="processImage()">
+<p id="result"></p>
+<canvas id="originalCanvas"></canvas>
+<canvas id="canvas" onclick="handleCanvasClick(event)"></canvas>
+
+<script>
+  let isOpencvReady = false;
+  let points = [];
+  let angles = [];
+
+  function onOpenCvReady() {
+    isOpencvReady = true;
+  }
+
+  function processImage() {
+    if (!isOpencvReady) {
+      alert("OpenCV not ready. Please wait a moment and try again.");
+      return;
+    }
+
+    points = []; // Reset points
+    angles = []; // Reset angles
+
+    const inputElement = document.getElementById('imageInput');
+    const resultElement = document.getElementById('result');
+    const originalCanvas = document.getElementById('originalCanvas');
+    const canvas = document.getElementById('canvas');
+    const contextOriginal = originalCanvas.getContext('2d');
+
+    const file = inputElement.files[0];
+    if (!file) {
+      alert("Please select an image.");
+      return;
+    }
+
+    const imgElement = new Image();
+    imgElement.src = URL.createObjectURL(file);
+
+    imgElement.onload = function () {
+      // Display the original image
+      originalCanvas.width = imgElement.width;
+      originalCanvas.height = imgElement.height;
+      contextOriginal.drawImage(imgElement, 0, 0, originalCanvas.width, originalCanvas.height);
+
+      // Automatically detect angles
+      detectAngles(imgElement);
+
+      // Evaluate symmetry
+      evaluateSymmetry();
+    };
+  }
+
+  function detectAngles(imgElement) {
+    const src = cv.imread(imgElement);
+    const edges = new cv.Mat();
+    const lines = new cv.Mat();
+
+    // Convert the image to grayscale
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+    // Apply Gaussian blur
+    const blurred = new cv.Mat();
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+
+    // Apply Canny edge detection
+    cv.Canny(blurred, edges, 50, 150);
+
+    // Dilate the image to connect components
+    const dilated = new cv.Mat();
+    const dilateSize = 3;
+    const dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(dilateSize, dilateSize));
+    cv.dilate(edges, dilated, dilateKernel);
+
+    // Use Hough transform to detect lines
+    cv.HoughLines(dilated, lines, 1, Math.PI / 180, 100);
+
+    // Process the detected lines
+    for (let i = 0; i < lines.rows; ++i) {
+      const rho = lines.data32F[i * 2];
+      const theta = lines.data32F[i * 2 + 1];
+      const angleDeg = (theta * 180) / Math.PI;
+
+      // Store the angles for later evaluation
+      angles.push(angleDeg);
+    }
+
+    // Clean up
+    src.delete();
+    gray.delete();
+    blurred.delete();
+    edges.delete();
+    dilated.delete();
+    dilateKernel.delete();
+    lines.delete();
+  }
+
+  function handleCanvasClick(event) {
+    const canvas = document.getElementById('canvas');
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    points.push({ x, y });
+
+    // Draw a point on the canvas
+    const context = canvas.getContext('2d');
+    context.fillStyle = 'red';
+    context.beginPath();
+    context.arc(x, y, 5, 0, 2 * Math.PI);
+    context.fill();
+
+    if (points.length === 4) {
+      calculateAndDisplayTaperAngles();
+      checkSymmetry();
+    }
+  }
+
+  function evaluateSymmetry() {
+    const resultElement = document.getElementById('result');
+    const threshold = 5; // Adjust the threshold as needed
+
+    // Compare the angles of left and right tapers
+    const leftTaperAngle = angles[0];
+    const rightTaperAngle = angles[1];
+
+    // Check if the difference exceeds the threshold
+    const angleDifference = Math.abs(leftTaperAngle - rightTaperAngle);
+    if (angleDifference > threshold) {
+      resultElement.textContent += `\nPossible asymmetry detected. Angle difference: ${angleDifference.toFixed(2)}`;
+    } else {
+      resultElement.textContent += '\nSymmetrical taper detected.';
+    }
+  }
+
+  function calculateAndDisplayTaperAngles() {
+    const resultElement = document.getElementById('result');
+    if (points.length < 4) {
+      resultElement.textContent = "Please click on four points to define the lines.";
+      return;
+    }
+
+    // Calculate distances for taper angle
+    const deltaY = Math.abs(points[0].y - points[1].y);
+    const deltaX = Math.abs(points[0].x - points[1].x);
+    const L = Math.hypot(deltaY, deltaX);
+
+    // Calculate the taper angle relative to horizontal in degrees
+    const taperAngleRad = Math.atan(deltaY / deltaX);
+    const taperAngleDeg = (taperAngleRad * 180) / Math.PI;
+
+    // Calculate the angle on the other side relative to vertical in degrees
+    const deltaY2 = Math.abs(points[2].y - points[3].y);
+    const taperAngleRad2 = Math.atan(deltaY2 / deltaX);
+    const taperAngleDeg2 = (taperAngleRad2 * 180) / Math.PI;
+
+    // Draw the lines on the canvas
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    context.strokeStyle = 'red';
+    context.lineWidth = 2;
+
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    context.lineTo(points[1].x, points[1].y);
+    context.stroke();
+
+    context.beginPath();
+    context.moveTo(points[2].x, points[2].y);
+    context.lineTo(points[3].x, points[3].y);
+    context.stroke();
+
+    // Draw the angle text
+    const centerX = (points[0].x + points[1].x) / 2;
+    const centerY = (points[0].y + points[1].y) / 2;
+
+    context.fillStyle = 'blue';
+    context.font = '14px Arial';
+    context.fillText(`Angle: ${90 - taperAngleDeg.toFixed(2)} degrees`, centerX - 40, centerY - 20);
+
+    const centerX2 = (points[2].x + points[3].x) / 2;
+    const centerY2 = (points[2].y + points[3].y) / 2;
+
+    context.fillText(`Angle: ${90 - taperAngleDeg2.toFixed(2)} degrees`, centerX2 - 40, centerY2 - 20);
+
+    // Display the results
+    resultElement.textContent = `The dental taper angle left is: ${90 - taperAngleDeg.toFixed(2)} degrees`;
+    resultElement.textContent += `\n The dental taper angle right is: ${90 - taperAngleDeg2.toFixed(2)} degrees`;
+
+  }
+
+  function checkSymmetry() {
+    const resultElement = document.getElementById('result');
+    const deltaX1 = Math.abs(points[0].x - points[1].x);
+    const deltaX2 = Math.abs(points[2].x - points[3].x);
+    const deltaY1 = Math.abs(points[0].y - points[1].y);
+    const deltaY2 = Math.abs(points[2].y - points[3].y);
+
+    const isSymmetrical = Math.abs(deltaX1 - deltaX2) < 5 && Math.abs(deltaY1 - deltaY2) < 5;
+
+    resultElement.textContent += `\nSymmetry: ${isSymmetrical ? "Symmetrical" : "Not Symmetrical"}`;
+  }
+</script>
+</body>
+
+</html>
