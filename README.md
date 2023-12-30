@@ -1,4 +1,4 @@
-# Projet web
+# Web Project
 
 
 ### SonarQube 
@@ -10,7 +10,17 @@
 
 
 
-# Vidéo Démo 
+# Vidéo Demonstration 
+
+To log in as an admin, use the following credentials:
+
+    Username: admin
+    Password: admin
+    
+For professor login, use the following credentials:
+
+    Username: prof
+    Password: prof
 
 
 
