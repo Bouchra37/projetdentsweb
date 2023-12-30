@@ -1,4 +1,4 @@
-# projet web
+# Projet web
 
 
 ### SonarQube 
@@ -10,4 +10,4 @@
 
 
 
-### Vidéo Démo 
+# Vidéo Démo 
