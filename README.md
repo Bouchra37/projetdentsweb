@@ -12,6 +12,8 @@
 
 # Vidéo Demonstration 
 
+### Deployment link : https://projetdentsweb-production.up.railway.app/login
+
 To log in as an admin, use the following credentials:
 
     Username: admin
